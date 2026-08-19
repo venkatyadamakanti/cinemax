@@ -1,54 +1,81 @@
-from django.shortcuts import get_object_or_404
-from django.http import FileResponse, Http404
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from .models import Booking, Ticket
-from .pdf_generator import generate_pdf_ticket
+from rest_framework import status
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def user_booking_history_api(request):
-    bookings = Booking.objects.filter(user=request.user).select_related(
-        'show__movie', 'show__screen__theater'
-    ).prefetch_related('booked_seats__show_seat__seat', 'payments').order_by('-created_at')
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_api(request):
+    username = request.data.get('username', '').strip()
+    email = request.data.get('email', '').strip()
+    password = request.data.get('password', '').strip()
+    first_name = request.data.get('first_name', '').strip()
+    last_name = request.data.get('last_name', '').strip()
 
-    data = []
-    for b in bookings:
-        seats = [bs.show_seat.seat.seat_label for bs in b.booked_seats.all()]
-        has_ticket = hasattr(b, 'ticket') and bool(b.ticket.pdf_file)
+    if not username or not password:
+        return Response({'error': 'Username and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        data.append({
-            'booking_id': str(b.id),
-            'movie_title': b.show.movie.title,
-            'poster_url': b.show.movie.poster_url,
-            'theater_name': b.show.screen.theater.name,
-            'screen_name': b.show.screen.name,
-            'show_time': b.show.start_time.strftime('%b %d, %Y %I:%M %p'),
-            'seats': seats,
-            'total_amount': float(b.total_amount),
-            'status': b.status,
-            'created_at': b.created_at.strftime('%b %d, %Y %I:%M %p'),
-            'has_ticket': has_ticket
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username is already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        first_name=first_name,
+        last_name=last_name
+    )
+
+    login(request, user)
+    return Response({
+        'message': 'Registration successful!',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'is_staff': user.is_staff
+        }
+    }, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_api(request):
+    username = request.data.get('username', '').strip()
+    password = request.data.get('password', '').strip()
+
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return Response({
+            'message': 'Login successful!',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'is_staff': user.is_staff
+            }
         })
+    return Response({'error': 'Invalid username or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    return Response({'bookings': data})
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout_api(request):
+    logout(request)
+    return Response({'message': 'Logged out successfully.'})
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def download_ticket_pdf_api(request, booking_id):
-    booking = get_object_or_404(Booking, id=booking_id, user=request.user)
-
-    if booking.status != 'CONFIRMED':
-        return Response({'error': 'Ticket is only available for confirmed bookings.'}, status=400)
-
-    ticket = getattr(booking, 'ticket', None)
-    if not ticket or not ticket.pdf_file:
-        ticket = generate_pdf_ticket(booking)
-
-    if not ticket.pdf_file:
-        raise Http404("PDF ticket could not be found.")
-
-    response = FileResponse(ticket.pdf_file.open('rb'), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="Cinemax_Ticket_{str(booking.id)[:8]}.pdf"'
-    return response
+@permission_classes([AllowAny])
+def current_user_api(request):
+    if request.user.is_authenticated:
+        return Response({
+            'is_authenticated': True,
+            'id': request.user.id,
+            'username': request.user.username,
+            'email': request.user.email,
+            'first_name': request.user.first_name,
+            'is_staff': request.user.is_staff
+        })
+    return Response({'is_authenticated': False})

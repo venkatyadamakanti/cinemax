@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class BookingsConfig(AppConfig):
-    name = 'bookings'
+class CoreConfig(AppConfig):
+    name = 'core'
