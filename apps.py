@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class PaymentsConfig(AppConfig):
-    name = 'payments'
+class ReportsConfig(AppConfig):
+    name = 'reports'
