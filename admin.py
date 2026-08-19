@@ -1,12 +1,13 @@
 from django.contrib import admin
-from .models import Review, ReviewReport
+from .models import Show, ShowSeat
 
-@admin.register(Review)
-class ReviewAdmin(admin.ModelAdmin):
-    list_display = ('movie', 'user', 'rating', 'is_verified_viewer', 'flagged', 'created_at')
-    list_filter = ('rating', 'is_verified_viewer', 'flagged')
-    search_fields = ('movie__title', 'user__username', 'comment')
+@admin.register(Show)
+class ShowAdmin(admin.ModelAdmin):
+    list_display = ('movie', 'screen', 'start_time', 'ticket_price', 'is_cancelled')
+    list_filter = ('movie', 'screen__theater', 'is_cancelled', 'start_time')
+    search_fields = ('movie__title', 'screen__theater__name')
 
-@admin.register(ReviewReport)
-class ReviewReportAdmin(admin.ModelAdmin):
-    list_display = ('review', 'user', 'reason', 'reported_at')
+@admin.register(ShowSeat)
+class ShowSeatAdmin(admin.ModelAdmin):
+    list_display = ('show', 'seat', 'status', 'reserved_until', 'reserved_by')
+    list_filter = ('status', 'show__movie')

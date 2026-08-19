@@ -1,37 +1,58 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from movies.models import Movie
+from theaters.models import Screen, Seat
 
-class Review(models.Model):
-    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='reviews', db_index=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews', db_index=True)
-    rating = models.IntegerField(choices=[(i, str(i)) for i in range(1, 6)]) # 1 to 5 stars
-    comment = models.TextField()
-    is_verified_viewer = models.BooleanField(default=False)
-    flagged = models.BooleanField(default=False, db_index=True)
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-    updated_at = models.DateTimeField(auto_now=True)
+class Show(models.Model):
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='shows', db_index=True)
+    screen = models.ForeignKey(Screen, on_delete=models.CASCADE, related_name='shows', db_index=True)
+    start_time = models.DateTimeField(db_index=True)
+    end_time = models.DateTimeField(db_index=True)
+    ticket_price = models.DecimalField(max_digits=8, decimal_places=2, default=300.00, db_index=True)
+    is_cancelled = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ('movie', 'user') # One review per movie per user
         indexes = [
-            models.Index(fields=['movie', 'created_at']),
-            models.Index(fields=['flagged']),
+            models.Index(fields=['movie', 'start_time']),
+            models.Index(fields=['screen', 'start_time']),
+            models.Index(fields=['start_time']),
+            models.Index(fields=['ticket_price']),
         ]
-        ordering = ['-created_at']
+        ordering = ['start_time']
 
     def __str__(self):
-        verified_str = " (Verified)" if self.is_verified_viewer else ""
-        return f"{self.user.username}'s {self.rating}★ review for {self.movie.title}{verified_str}"
+        return f"{self.movie.title} at {self.screen.theater.name} ({self.screen.name}) - {self.start_time.strftime('%Y-%m-%d %H:%M')}"
 
-class ReviewReport(models.Model):
-    review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name='reports')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='submitted_reports')
-    reason = models.CharField(max_length=255)
-    reported_at = models.DateTimeField(auto_now_add=True)
+class ShowSeat(models.Model):
+    STATUS_CHOICES = [
+        ('AVAILABLE', 'Available'),
+        ('RESERVED', 'Temporarily Reserved (2 min hold)'),
+        ('BOOKED', 'Booked'),
+    ]
+
+    show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name='show_seats', db_index=True)
+    seat = models.ForeignKey(Seat, on_delete=models.CASCADE, related_name='show_seats')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='AVAILABLE', db_index=True)
+    reserved_until = models.DateTimeField(null=True, blank=True, db_index=True)
+    reserved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='held_seats')
 
     class Meta:
-        unique_together = ('review', 'user')
+        unique_together = ('show', 'seat')
+        indexes = [
+            models.Index(fields=['show', 'status']),
+            models.Index(fields=['reserved_until']),
+        ]
+
+    def is_expired(self):
+        if self.status == 'RESERVED' and self.reserved_until:
+            return timezone.now() > self.reserved_until
+        return False
+
+    def get_effective_status(self):
+        if self.status == 'RESERVED' and self.is_expired():
+            return 'AVAILABLE'
+        return self.status
 
     def __str__(self):
-        return f"Report by {self.user.username} on Review #{self.review.id}"
+        return f"{self.show} - Seat {self.seat.seat_label} ({self.get_effective_status()})"

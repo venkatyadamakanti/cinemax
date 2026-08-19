@@ -11,51 +11,63 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('movies', '0001_initial'),
+        ('theaters', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Review',
+            name='Show',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('rating', models.IntegerField(choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')])),
-                ('comment', models.TextField()),
-                ('is_verified_viewer', models.BooleanField(default=False)),
-                ('flagged', models.BooleanField(db_index=True, default=False)),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('movie', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='reviews', to='movies.movie')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='reviews', to=settings.AUTH_USER_MODEL)),
+                ('start_time', models.DateTimeField(db_index=True)),
+                ('end_time', models.DateTimeField(db_index=True)),
+                ('ticket_price', models.DecimalField(db_index=True, decimal_places=2, default=300.0, max_digits=8)),
+                ('is_cancelled', models.BooleanField(default=False)),
+                ('movie', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='shows', to='movies.movie')),
+                ('screen', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='shows', to='theaters.screen')),
             ],
             options={
-                'ordering': ['-created_at'],
+                'ordering': ['start_time'],
             },
         ),
         migrations.CreateModel(
-            name='ReviewReport',
+            name='ShowSeat',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('reason', models.CharField(max_length=255)),
-                ('reported_at', models.DateTimeField(auto_now_add=True)),
-                ('review', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='reports', to='reviews.review')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='submitted_reports', to=settings.AUTH_USER_MODEL)),
+                ('status', models.CharField(choices=[('AVAILABLE', 'Available'), ('RESERVED', 'Temporarily Reserved (2 min hold)'), ('BOOKED', 'Booked')], db_index=True, default='AVAILABLE', max_length=15)),
+                ('reserved_until', models.DateTimeField(blank=True, db_index=True, null=True)),
+                ('reserved_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='held_seats', to=settings.AUTH_USER_MODEL)),
+                ('seat', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='show_seats', to='theaters.seat')),
+                ('show', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='show_seats', to='shows.show')),
             ],
         ),
         migrations.AddIndex(
-            model_name='review',
-            index=models.Index(fields=['movie', 'created_at'], name='reviews_rev_movie_i_6af86f_idx'),
+            model_name='show',
+            index=models.Index(fields=['movie', 'start_time'], name='shows_show_movie_i_3b276b_idx'),
         ),
         migrations.AddIndex(
-            model_name='review',
-            index=models.Index(fields=['flagged'], name='reviews_rev_flagged_308e31_idx'),
+            model_name='show',
+            index=models.Index(fields=['screen', 'start_time'], name='shows_show_screen__59760c_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='show',
+            index=models.Index(fields=['start_time'], name='shows_show_start_t_33f338_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='show',
+            index=models.Index(fields=['ticket_price'], name='shows_show_ticket__fe7a3f_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='showseat',
+            index=models.Index(fields=['show', 'status'], name='shows_shows_show_id_154d0e_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='showseat',
+            index=models.Index(fields=['reserved_until'], name='shows_shows_reserve_06f425_idx'),
         ),
         migrations.AlterUniqueTogether(
-            name='review',
-            unique_together={('movie', 'user')},
-        ),
-        migrations.AlterUniqueTogether(
-            name='reviewreport',
-            unique_together={('review', 'user')},
+            name='showseat',
+            unique_together={('show', 'seat')},
         ),
     ]
