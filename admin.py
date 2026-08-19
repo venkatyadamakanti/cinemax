@@ -1,13 +1,22 @@
 from django.contrib import admin
-from .models import Show, ShowSeat
+from .models import City, Theater, Screen, Seat
 
-@admin.register(Show)
-class ShowAdmin(admin.ModelAdmin):
-    list_display = ('movie', 'screen', 'start_time', 'ticket_price', 'is_cancelled')
-    list_filter = ('movie', 'screen__theater', 'is_cancelled', 'start_time')
-    search_fields = ('movie__title', 'screen__theater__name')
+@admin.register(City)
+class CityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'state')
 
-@admin.register(ShowSeat)
-class ShowSeatAdmin(admin.ModelAdmin):
-    list_display = ('show', 'seat', 'status', 'reserved_until', 'reserved_by')
-    list_filter = ('status', 'show__movie')
+@admin.register(Theater)
+class TheaterAdmin(admin.ModelAdmin):
+    list_display = ('name', 'city', 'phone', 'email')
+    list_filter = ('city',)
+    search_fields = ('name', 'city__name')
+
+@admin.register(Screen)
+class ScreenAdmin(admin.ModelAdmin):
+    list_display = ('name', 'theater', 'screen_type', 'total_seats')
+    list_filter = ('theater', 'screen_type')
+
+@admin.register(Seat)
+class SeatAdmin(admin.ModelAdmin):
+    list_display = ('screen', 'row', 'number', 'seat_type', 'base_price')
+    list_filter = ('screen__theater', 'seat_type')

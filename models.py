@@ -1,58 +1,68 @@
 from django.db import models
-from django.contrib.auth.models import User
-from django.utils import timezone
-from movies.models import Movie
-from theaters.models import Screen, Seat
 
-class Show(models.Model):
-    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='shows', db_index=True)
-    screen = models.ForeignKey(Screen, on_delete=models.CASCADE, related_name='shows', db_index=True)
-    start_time = models.DateTimeField(db_index=True)
-    end_time = models.DateTimeField(db_index=True)
-    ticket_price = models.DecimalField(max_digits=8, decimal_places=2, default=300.00, db_index=True)
-    is_cancelled = models.BooleanField(default=False)
+class City(models.Model):
+    name = models.CharField(max_length=100, unique=True, db_index=True)
+    state = models.CharField(max_length=100)
+
+    class Meta:
+        verbose_name_plural = 'Cities'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name}, {self.state}"
+
+class Theater(models.Model):
+    name = models.CharField(max_length=150, db_index=True)
+    city = models.ForeignKey(City, on_delete=models.CASCADE, related_name='theaters', db_index=True)
+    address = models.TextField()
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
 
     class Meta:
         indexes = [
-            models.Index(fields=['movie', 'start_time']),
-            models.Index(fields=['screen', 'start_time']),
-            models.Index(fields=['start_time']),
-            models.Index(fields=['ticket_price']),
+            models.Index(fields=['city']),
+            models.Index(fields=['name']),
         ]
-        ordering = ['start_time']
 
     def __str__(self):
-        return f"{self.movie.title} at {self.screen.theater.name} ({self.screen.name}) - {self.start_time.strftime('%Y-%m-%d %H:%M')}"
+        return f"{self.name} ({self.city.name})"
 
-class ShowSeat(models.Model):
-    STATUS_CHOICES = [
-        ('AVAILABLE', 'Available'),
-        ('RESERVED', 'Temporarily Reserved (2 min hold)'),
-        ('BOOKED', 'Booked'),
+class Screen(models.Model):
+    SCREEN_TYPES = [
+        ('2D', 'Standard 2D'),
+        ('3D', 'RealD 3D'),
+        ('IMAX', 'IMAX 3D'),
+        ('4DX', '4DX Motion'),
     ]
 
-    show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name='show_seats', db_index=True)
-    seat = models.ForeignKey(Seat, on_delete=models.CASCADE, related_name='show_seats')
-    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='AVAILABLE', db_index=True)
-    reserved_until = models.DateTimeField(null=True, blank=True, db_index=True)
-    reserved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='held_seats')
-
-    class Meta:
-        unique_together = ('show', 'seat')
-        indexes = [
-            models.Index(fields=['show', 'status']),
-            models.Index(fields=['reserved_until']),
-        ]
-
-    def is_expired(self):
-        if self.status == 'RESERVED' and self.reserved_until:
-            return timezone.now() > self.reserved_until
-        return False
-
-    def get_effective_status(self):
-        if self.status == 'RESERVED' and self.is_expired():
-            return 'AVAILABLE'
-        return self.status
+    theater = models.ForeignKey(Theater, on_delete=models.CASCADE, related_name='screens')
+    name = models.CharField(max_length=50) # e.g. Screen 1, Audi 2
+    screen_type = models.CharField(max_length=10, choices=SCREEN_TYPES, default='2D')
+    total_seats = models.IntegerField(default=120)
 
     def __str__(self):
-        return f"{self.show} - Seat {self.seat.seat_label} ({self.get_effective_status()})"
+        return f"{self.theater.name} - {self.name} ({self.screen_type})"
+
+class Seat(models.Model):
+    SEAT_TYPES = [
+        ('REGULAR', 'Regular'),
+        ('PREMIUM', 'Premium'),
+        ('VIP', 'VIP Recliner'),
+    ]
+
+    screen = models.ForeignKey(Screen, on_delete=models.CASCADE, related_name='seats')
+    row = models.CharField(max_length=5) # A, B, C...
+    number = models.IntegerField() # 1, 2, 3...
+    seat_type = models.CharField(max_length=15, choices=SEAT_TYPES, default='REGULAR')
+    base_price = models.DecimalField(max_digits=8, decimal_places=2, default=250.00)
+
+    class Meta:
+        unique_together = ('screen', 'row', 'number')
+        ordering = ['row', 'number']
+
+    @property
+    def seat_label(self):
+        return f"{self.row}{self.number}"
+
+    def __str__(self):
+        return f"{self.screen.theater.name} - {self.screen.name} - Seat {self.seat_label}"
